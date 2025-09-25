@@ -1,6 +1,6 @@
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Protocol, List
+from typing import Dict, Tuple, Protocol, List, Optional
 from datetime import date
 
 
@@ -448,30 +448,84 @@ class HTMLDocumentBuilder:
 </html>"""
 
 
-if __name__ == "__main__":
-    theme = CalendarTheme()
-    builder = HTMLDocumentBuilder()
+class CalendarGenerator:
+    def __init__(self, theme: Optional[CalendarTheme] = None):
+        self.theme = theme or CalendarTheme()
+        self.builder = HTMLDocumentBuilder()
 
-    for lang in LocalizationFactory.get_supported_languages():
+    def generate_html_calendar(
+        self, year: int, month: int, lang: str = "ru", filename: Optional[str] = None
+    ) -> str:
         localization = LocalizationFactory.create(lang)
-        calendar = Calendar(2025, 9, localization)
-        renderer = HTMLCalendarRenderer(theme)
+        calendar = Calendar(year, month, localization)
+        renderer = HTMLCalendarRenderer(self.theme)
 
         calendar_html = renderer.render(calendar)
-        month_name = localization.get_months()[calendar.month - 1]
 
+        month_name = localization.get_months()[month - 1]
         document = (
-            builder.reset()
-            .set_title(f"Календарь - {month_name} {calendar.year}")
+            self.builder.reset()
+            .set_title(f"Календарь - {month_name} {year}")
             .add_meta_tag("viewport", "width=device-width, initial-scale=1.0")
-            .add_meta_tag("description", f"Календарь на {month_name} {calendar.year}")
+            .add_meta_tag("description", f"Календарь на {month_name} {year}")
             .set_body(calendar_html)
             .build()
         )
 
-        with open(f"calendar_{lang}.html", "w", encoding="utf-8") as file:
-            file.write(document)
+        if filename:
+            # Добавляем .html если расширение не указано
+            if not filename.lower().endswith(".html"):
+                filename += ".html"
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(document)
 
-    print(
-        f"Календари созданы для языков: {LocalizationFactory.get_supported_languages()}"
+        return document
+
+    def generate_multiple_calendars(
+        self,
+        year: int,
+        month: int,
+        languages: Optional[List[str]] = None,
+        filename_template: str = "calendar_{lang}.html",
+    ) -> Dict[str, str]:
+        if languages is None:
+            languages = LocalizationFactory.get_supported_languages()
+
+        results = {}
+        for lang in languages:
+            filename = filename_template.format(lang=lang)
+            document = self.generate_html_calendar(year, month, lang, filename)
+            results[lang] = document
+
+        return results
+
+    def set_custom_theme(self, theme: CalendarTheme):
+        self.theme = theme
+
+    def get_supported_languages(self) -> List[str]:
+        return LocalizationFactory.get_supported_languages()
+
+    def add_custom_language(self, lang: str, localization_class):
+        LocalizationFactory.register_language(lang, localization_class)
+
+
+if __name__ == "__main__":
+    generator = CalendarGenerator()
+
+    current_time = time.localtime()
+    current_year = current_time.tm_year
+    current_month = current_time.tm_mon
+
+    results = generator.generate_multiple_calendars(
+        year=current_year, month=current_month
+    )
+
+    print(f"Созданы календари для {len(results)} языков:")
+    for lang in results.keys():
+        print(f"- calendar_{lang}.html")
+
+    print(f"\nПоддерживаемые языки: {generator.get_supported_languages()}")
+
+    custom_calendar = generator.generate_html_calendar(
+        year=2025, month=1, lang="ru", filename="new_year_2025.html"
     )

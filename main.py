@@ -1,7 +1,7 @@
 import time
-from typing import Dict, Tuple, Protocol
-
-cal_ID = 0
+from abc import ABC, abstractmethod
+from typing import Dict, Tuple, Protocol, List
+from datetime import date
 
 
 class LocalizationStrategy(Protocol):
@@ -133,146 +133,58 @@ class LocalizationFactory:
         return list(cls._strategies.keys())
 
 
-class MonthlyCalendar:
-    def __init__(self, year=None, month=None, lang="ru"):
-        self.localization = LocalizationFactory.create(lang)
+class CalendarDay:
+    def __init__(
+        self,
+        day: int,
+        month: int,
+        year: int,
+        is_weekend: bool = False,
+        is_holiday: bool = False,
+        holiday_title: str = "",
+    ):
+        self.day = day
+        self.month = month
+        self.year = year
+        self.is_weekend = is_weekend
+        self.is_holiday = is_holiday
+        self.holiday_title = holiday_title
+        self.is_current = False
 
-        # Обновляем цветовую схему согласно требованиям
-        self.saFontColor = "#FF0000"  # Ярко красный для субботы
-        self.saBGColor = "#FFE0E0"  # Светло красный фон для субботы
-        self.suFontColor = "#FF0000"  # Ярко красный для воскресенья
-        self.suBGColor = "#FFE0E0"  # Светло красный фон для воскресенья
+    def get_date_string(self) -> str:
+        return f"{self.year}-{self.month:02d}-{self.day:02d}"
 
-        # Синий цвет для праздников согласно требованиям
-        self.holidayFontColor = "#0000FF"  # Синий цвет текста
-        self.holidayBGColor = "#E0E0FF"  # Светло синий фон
 
-        self.tFontFace = "Arial, Helvetica"
-        self.tFontSize = 12
-        self.tFontColor = "#FFFFFF"
-        self.tBGColor = "#304B90"
+class Calendar:
+    def __init__(self, year: int, month: int, localization: LocalizationStrategy):
+        self.year = year
+        self.month = month
+        self.localization = localization
+        self._month_days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
-        self.hFontFace = "Arial, Helvetica"
-        self.hFontSize = 10
-        self.hFontColor = "#FFFFFF"
-        self.hBGColor = "#304B90"
-
-        self.dFontFace = "Arial, Helvetica"
-        self.dFontSize = 12
-        self.dFontColor = "#000000"
-        self.dBGColor = "#FFFFFF"
-
-        self.saFontColor = "#FF0000"
-        self.saBGColor = "#FFE0E0"
-        self.suFontColor = "#FF0000"
-        self.suBGColor = "#FFE0E0"
-
-        self.holidayFontColor = "#0000FF"
-        self.holidayBGColor = "#E0E0FF"
-
-        self.tdBorderColor = "red"
-        self.borderColor = "#304B90"
-        self.hilightColor = "#FFFF00"
-
-        self.link = ""
-
-        if year is None and month is None:
-            year = time.localtime().tm_year
-            month = time.localtime().tm_mon
-        elif year is None and month is not None:
-            year = time.localtime().tm_year
-        elif month is None:
-            month = 1
-        self.year = int(year)
-        self.month = int(month)
-        self.specDays = {}
-
-    __size = 0
-    __mDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-
-    def set_styles(self):
-        globals()["cal_ID"] += 1
-        html = "<style> .cssTitle" + str(globals()["cal_ID"]) + " { "
-        if self.tFontFace:
-            html += "font-family: " + self.tFontFace + "; "
-        if self.tFontSize:
-            html += "font-size: " + str(self.tFontSize) + "px; "
-        if self.tFontColor:
-            html += "color: " + self.tFontColor + "; "
-        if self.tBGColor:
-            html += "background-color: " + self.tBGColor + "; "
-        html += "} .cssHeading" + str(globals()["cal_ID"]) + " { "
-        if self.hFontFace:
-            html += "font-family: " + self.hFontFace + "; "
-        if self.hFontSize:
-            html += "font-size: " + str(self.hFontSize) + "px; "
-        if self.hFontColor:
-            html += "color: " + self.hFontColor + "; "
-        if self.hBGColor:
-            html += "background-color: " + self.hBGColor + "; "
-        html += "} .cssDays" + str(globals()["cal_ID"]) + " { "
-        if self.dFontFace:
-            html += "font-family: " + self.dFontFace + "; "
-        if self.dFontSize:
-            html += "font-size: " + str(self.dFontSize) + "px; "
-        if self.dFontColor:
-            html += "color: " + self.dFontColor + "; "
-        if self.dBGColor:
-            html += "background-color: " + self.dBGColor + "; "
-        html += "} .cssSaturdays" + str(globals()["cal_ID"]) + " { "
-        if self.dFontFace:
-            html += "font-family: " + self.dFontFace + "; "
-        if self.dFontSize:
-            html += "font-size: " + str(self.dFontSize) + "px; "
-        if self.saFontColor:
-            html += "color: " + self.saFontColor + "; "
-        if self.saBGColor:
-            html += "background-color: " + self.saBGColor + "; "
-        html += "} .cssSundays" + str(globals()["cal_ID"]) + " { "
-        if self.dFontFace:
-            html += "font-family: " + self.dFontFace + "; "
-        if self.dFontSize:
-            html += "font-size: " + str(self.dFontSize) + "px; "
-        if self.suFontColor:
-            html += "color: " + self.suFontColor + "; "
-        if self.suBGColor:
-            html += "background-color: " + self.suBGColor + "; "
-        html += "} .cssHolidays" + str(globals()["cal_ID"]) + " { "
-        if self.dFontFace:
-            html += "font-family: " + self.dFontFace + "; "
-        if self.dFontSize:
-            html += "font-size: " + str(self.dFontSize) + "px; "
-        if self.holidayFontColor:
-            html += "color: " + self.holidayFontColor + "; "
-        if self.holidayBGColor:
-            html += "background-color: " + self.holidayBGColor + "; "
-        html += "} .cssHilight" + str(globals()["cal_ID"]) + " { "
-        if self.dFontFace:
-            html += "font-family: " + self.dFontFace + "; "
-        if self.dFontSize:
-            html += "font-size: " + str(self.dFontSize) + "px; "
-        if self.dFontColor:
-            html += "color: " + self.dFontColor + "; "
-        if self.hilightColor:
-            html += "background-color: " + self.hilightColor + "; "
-        html += "cursor: default; "
-        html += "} </style>"
-        return html
-
-    def leap_year(self, year):
+    def is_leap_year(self, year: int) -> bool:
         return not (year % 4) and (year < 1582 or year % 100 or not (year % 400))
 
-    def get_weekday(self, year, days):
-        a = days
-        if year:
-            a += (year - 1) * 365
-        for i in range(1, year):
-            if self.leap_year(i):
+    def get_days_in_month(self) -> int:
+        if self.month == 2 and self.is_leap_year(self.year):
+            return 29
+        return self._month_days[self.month - 1]
+
+    def get_first_weekday(self) -> int:
+        days = sum(self._month_days[: self.month - 1])
+        if self.month > 2 and self.is_leap_year(self.year):
+            days += 1
+
+        a = days + (self.year - 1) * 365
+        for i in range(1, self.year):
+            if self.is_leap_year(i):
                 a += 1
-        if year > 1582 or (year == 1582 and days >= 277):
+
+        if self.year > 1582 or (self.year == 1582 and days >= 277):
             a -= 10
 
-        offset = 1 if self.localization.get_week_start() == 1 else 0
+        week_start = self.localization.get_week_start()
+        offset = 1 if week_start == 1 else 0
 
         if a:
             a = (a - offset) % 7
@@ -280,183 +192,205 @@ class MonthlyCalendar:
             a += 7 - offset
         return a
 
-    def is_holiday(self, day):
-        return (day, self.month) in self.localization.get_holidays()
+    def generate_days(self) -> List[CalendarDay]:
+        days = []
+        holidays = self.localization.get_holidays()
+        current_date = date.today()
+        days_in_month = self.get_days_in_month()
 
-    def get_holiday_title(self, day):
-        return self.localization.get_holidays().get((day, self.month), "")
+        for day in range(1, days_in_month + 1):
+            first_weekday = self.get_first_weekday()
+            day_of_week = (first_weekday + day - 1) % 7
 
-    def table_cell(self, content, cls, date="", style=""):
-        size = int(round(self.__size * 1.5))
-        html = "<td align=center width=" + str(size) + ' class="' + cls + '"'
-
-        if content != "&nbsp;" and cls.lower().find("day") != -1:
-            link = self.link
-
-            if len(self.specDays) > 0 and content in self.specDays:
-                if self.specDays[content][0]:
-                    style += "background-color:" + self.specDays[content][0] + ";"
-                if self.specDays[content][1]:
-                    html += ' title="' + self.specDays[content][1] + '"'
-                if self.specDays[content][2]:
-                    link = self.specDays[content][2]
-                    style += "cursor:pointer" + ";"
-                else:
-                    link = "brak"
-                    style += "cursor:pointer" + ";"
-
-            if link == "brak":
-                html += (
-                    " onMouseOver=\"this.className='cssHilight"
-                    + str(globals()["cal_ID"])
-                    + "'\""
-                )
-                html += " onMouseOut=\"this.className='" + cls + "'\""
-                html += " onClick=\"document.location.href='" + "?date=" + date + "'\""
-
-            if link and link != "brak":
-                html += (
-                    " onMouseOver=\"this.className='cssHilight"
-                    + str(globals()["cal_ID"])
-                    + "'\""
-                )
-                html += " onMouseOut=\"this.className='" + cls + "'\""
-                html += (
-                    " onClick=\"document.location.href='"
-                    + link
-                    + "?date="
-                    + date
-                    + "'\""
-                )
-        if style:
-            html += ' style="' + style + '"'
-        html += ">" + content + "</td>"
-        return html
-
-    def table_head(self, content):
-        html = (
-            "<tr><td colspan=7"
-            + ' class="cssTitle'
-            + str(globals()["cal_ID"])
-            + '" align=center><b>'
-            + content
-            + "</b></td></tr><tr>"
-        )
-
-        weekdays = self.localization.get_weekdays()
-        for i in range(7):
             if self.localization.get_week_start() == 1:
-                day_index = i
+                is_weekend = day_of_week >= 5
             else:
-                day_index = (i + 6) % 7
+                is_weekend = day_of_week == 0 or day_of_week == 6
 
-            wDay = weekdays[day_index]
-            html += self.table_cell(wDay, "cssHeading" + str(globals()["cal_ID"]))
+            is_holiday = (day, self.month) in holidays
+            holiday_title = holidays.get((day, self.month), "")
+
+            calendar_day = CalendarDay(
+                day=day,
+                month=self.month,
+                year=self.year,
+                is_weekend=is_weekend,
+                is_holiday=is_holiday,
+                holiday_title=holiday_title,
+            )
+
+            if (
+                current_date.year == self.year
+                and current_date.month == self.month
+                and current_date.day == day
+            ):
+                calendar_day.is_current = True
+
+            days.append(calendar_day)
+
+        return days
+
+
+class CalendarTheme:
+    def __init__(self):
+        self.title_font = "Arial, Helvetica"
+        self.title_size = 12
+        self.title_color = "#FFFFFF"
+        self.title_bg = "#304B90"
+
+        self.day_font = "Arial, Helvetica"
+        self.day_size = 12
+        self.day_color = "#000000"
+        self.day_bg = "#FFFFFF"
+
+        self.weekend_color = "#FF0000"
+        self.weekend_bg = "#FFE0E0"
+
+        self.holiday_color = "#0000FF"
+        self.holiday_bg = "#E0E0FF"
+
+        self.border_color = "#304B90"
+        self.highlight_color = "#FFFF00"
+        self.current_day_border = "red"
+
+
+class CalendarRenderer(ABC):
+    def __init__(self, theme: CalendarTheme):
+        self.theme = theme
+
+    @abstractmethod
+    def render_header(self, calendar: Calendar) -> str:
+        pass
+
+    @abstractmethod
+    def render_weekdays(self, calendar: Calendar) -> str:
+        pass
+
+    @abstractmethod
+    def render_days(self, days: List[CalendarDay], calendar: Calendar) -> str:
+        pass
+
+    def render(self, calendar: Calendar) -> str:
+        days = calendar.generate_days()
+
+        result = self.render_header(calendar)
+        result += self.render_weekdays(calendar)
+        result += self.render_days(days, calendar)
+
+        return result
+
+
+class HTMLCalendarRenderer(CalendarRenderer):
+    def __init__(self, theme: CalendarTheme):
+        super().__init__(theme)
+        self._style_id = id(self)
+
+    def _generate_styles(self) -> str:
+        return f"""<style>
+.calendar-title-{self._style_id} {{
+    font-family: {self.theme.title_font};
+    font-size: {self.theme.title_size}px;
+    color: {self.theme.title_color};
+    background-color: {self.theme.title_bg};
+}}
+.calendar-day-{self._style_id} {{
+    font-family: {self.theme.day_font};
+    font-size: {self.theme.day_size}px;
+    color: {self.theme.day_color};
+    background-color: {self.theme.day_bg};
+}}
+.calendar-weekend-{self._style_id} {{
+    font-family: {self.theme.day_font};
+    font-size: {self.theme.day_size}px;
+    color: {self.theme.weekend_color};
+    background-color: {self.theme.weekend_bg};
+}}
+.calendar-holiday-{self._style_id} {{
+    font-family: {self.theme.day_font};
+    font-size: {self.theme.day_size}px;
+    color: {self.theme.holiday_color};
+    background-color: {self.theme.holiday_bg};
+}}
+</style>"""
+
+    def render_header(self, calendar: Calendar) -> str:
+        month_name = calendar.localization.get_months()[calendar.month - 1]
+        title = f"{month_name} {calendar.year}"
+
+        styles = self._generate_styles()
+
+        return f"""{styles}
+<table border="1" cellspacing="0" cellpadding="0">
+<tr><td bgcolor="{self.theme.border_color}">
+<table border="0" cellspacing="1" cellpadding="3">
+<tr><td colspan="7" class="calendar-title-{self._style_id}" align="center">
+<b>{title}</b>
+</td></tr>"""
+
+    def render_weekdays(self, calendar: Calendar) -> str:
+        weekdays = calendar.localization.get_weekdays()
+        html = "<tr>"
+
+        for weekday in weekdays:
+            html += f'<td class="calendar-title-{self._style_id}" align="center">{weekday}</td>'
 
         html += "</tr>"
         return html
 
-    def create(self):
-        self.__size = (
-            (self.hFontSize > self.dFontSize) and self.hFontSize or self.dFontSize
-        )
+    def render_days(self, days: List[CalendarDay], calendar: Calendar) -> str:
+        html = ""
+        first_weekday = calendar.get_first_weekday()
 
-        date = time.strftime("%Y-%m-%d", time.localtime())
-        (curYear, curMonth, curDay) = [int(v) for v in date.split("-")]
-
-        if self.year < 1 or self.year > 3999:
-            html = "<b>Год должен быть от 1 до 3999!</b>"
-        elif self.month < 1 or self.month > 12:
-            html = "<b>Месяц должен быть от 1 до 12!</b>"
-        else:
-            if self.leap_year(self.year):
-                self.__mDays[1] = 29
-            days = 0
-            for i in range(self.month - 1):
-                days += self.__mDays[i]
-
-            start = self.get_weekday(self.year, days)
-            stop = self.__mDays[self.month - 1]
-
-            html = self.set_styles()
-            html += "<table border=1 cellspacing=0 cellpadding=0><tr>"
-            html += "<td" + (self.borderColor and " bgcolor=" + self.borderColor) + ">"
-            html += "<table border=0 cellspacing=1 cellpadding=3>"
-            title = (
-                self.localization.get_months()[self.month - 1] + " " + str(self.year)
+        html += "<tr>"
+        for i in range(first_weekday):
+            html += (
+                f'<td class="calendar-day-{self._style_id}" align="center">&nbsp;</td>'
             )
-            html += self.table_head(title)
-            daycount = 1
 
-            if self.year == curYear and self.month == curMonth:
-                inThisMonth = 1
-            else:
-                inThisMonth = 0
+        current_weekday = first_weekday
 
-            while daycount <= stop:
-                html += "<tr>"
+        for day in days:
+            if current_weekday == 7:
+                html += "</tr><tr>"
+                current_weekday = 0
 
-                for i in range(7):
-                    if self.localization.get_week_start() == 1:
-                        day_of_week = i
-                    else:
-                        day_of_week = (i + 6) % 7
+            css_class = f"calendar-day-{self._style_id}"
+            style = ""
+            title_attr = ""
 
-                    if (
-                        daycount <= stop
-                        and daycount > 0
-                        and (daycount != 1 or i >= start)
-                        and self.is_holiday(daycount)
-                    ):
-                        cls = "cssHolidays"
-                    elif day_of_week == 5:
-                        cls = "cssSaturdays"
-                    elif day_of_week == 6:
-                        cls = "cssSundays"
-                    else:
-                        cls = "cssDays"
+            if day.is_holiday:
+                css_class = f"calendar-holiday-{self._style_id}"
+                if day.holiday_title:
+                    title_attr = f' title="{day.holiday_title}"'
+            elif day.is_weekend:
+                css_class = f"calendar-weekend-{self._style_id}"
 
-                    style = ""
-                    date = (
-                        "%s-%02d-%02d" % (self.year, self.month, daycount)
-                        if daycount <= stop
-                        else ""
-                    )
+            if day.is_current:
+                style = f' style="border: 3px solid {self.theme.current_day_border};"'
 
-                    if (daycount == 1 and i < start) or daycount > stop:
-                        content = "&nbsp;"
-                    else:
-                        content = str(daycount)
+            html += f'<td class="{css_class}" align="center"{title_attr}{style}>{day.day}</td>'
+            current_weekday += 1
 
-                        if self.is_holiday(daycount):
-                            holiday_title = self.get_holiday_title(daycount)
-                            if holiday_title:
-                                style += f'cursor:help;" title="{holiday_title}'
+        while current_weekday < 7:
+            html += (
+                f'<td class="calendar-day-{self._style_id}" align="center">&nbsp;</td>'
+            )
+            current_weekday += 1
 
-                        if inThisMonth and daycount == curDay:
-                            style = (
-                                "padding:0px;border:3px solid "
-                                + self.tdBorderColor
-                                + ";"
-                            )
-                        elif self.year == 1582 and self.month == 10 and daycount == 4:
-                            daycount = 14
-                        daycount += 1
-
-                    html += self.table_cell(
-                        content, cls + str(globals()["cal_ID"]), date, style
-                    )
-
-                html += "</tr>"
-            html += "</table></td></tr></table>"
+        html += "</tr></table></td></tr></table>"
         return html
 
 
 if __name__ == "__main__":
+    theme = CalendarTheme()
+
     for lang in LocalizationFactory.get_supported_languages():
-        calendar = MonthlyCalendar(2025, 9, lang)
-        body = calendar.create()
-        html = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>{body}</body></html>"
+        localization = LocalizationFactory.create(lang)
+        calendar = Calendar(2025, 9, localization)
+        renderer = HTMLCalendarRenderer(theme)
+
+        calendar_html = renderer.render(calendar)
+        html = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>{calendar_html}</body></html>"
 
         with open(f"calendar_{lang}.html", "w", encoding="utf-8") as file:
             file.write(html)

@@ -1,7 +1,7 @@
-import time
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Protocol, List, Optional
-from datetime import date
+from datetime import datetime, date
+from typing import Dict, Tuple, Optional, Protocol, List
+import time
 
 
 class LocalizationStrategy(Protocol):
@@ -40,6 +40,7 @@ class RussianLocalization:
     def get_holidays(self) -> Dict[Tuple[int, int], str]:
         return {
             (1, 1): "Новый год",
+            (7, 1): "Рождество",
             (23, 2): "День защитника Отечества",
             (8, 3): "Международный женский день",
             (1, 5): "Праздник Весны и Труда",
@@ -150,9 +151,13 @@ class CalendarDay:
         self.is_holiday = is_holiday
         self.holiday_title = holiday_title
         self.is_current = False
+        self.is_empty = False
 
     def get_date_string(self) -> str:
         return f"{self.year}-{self.month:02d}-{self.day:02d}"
+
+    def get_display_text(self) -> str:
+        return str(self.day) if not self.is_empty else "&nbsp;"
 
 
 class Calendar:
@@ -192,14 +197,21 @@ class Calendar:
             a += 7 - offset
         return a
 
-    def generate_days(self) -> List[CalendarDay]:
-        days = []
+    def generate_calendar_grid(self) -> List[List[CalendarDay]]:
+        weeks = []
         holidays = self.localization.get_holidays()
         current_date = date.today()
         days_in_month = self.get_days_in_month()
+        first_weekday = self.get_first_weekday()
+
+        current_week = []
+
+        for i in range(first_weekday):
+            empty_day = CalendarDay(0, self.month, self.year)
+            empty_day.is_empty = True
+            current_week.append(empty_day)
 
         for day in range(1, days_in_month + 1):
-            first_weekday = self.get_first_weekday()
             day_of_week = (first_weekday + day - 1) % 7
 
             if self.localization.get_week_start() == 1:
@@ -226,9 +238,25 @@ class Calendar:
             ):
                 calendar_day.is_current = True
 
-            days.append(calendar_day)
+            current_week.append(calendar_day)
 
-        return days
+            if len(current_week) == 7:
+                weeks.append(current_week)
+                current_week = []
+
+        while len(current_week) < 7:
+            empty_day = CalendarDay(0, self.month, self.year)
+            empty_day.is_empty = True
+            current_week.append(empty_day)
+
+        if current_week:
+            weeks.append(current_week)
+
+        return weeks
+
+    def get_title(self) -> str:
+        month_name = self.localization.get_months()[self.month - 1]
+        return f"{month_name} {self.year}"
 
 
 class CalendarTheme:
@@ -259,25 +287,8 @@ class CalendarRenderer(ABC):
         self.theme = theme
 
     @abstractmethod
-    def render_header(self, calendar: Calendar) -> str:
-        pass
-
-    @abstractmethod
-    def render_weekdays(self, calendar: Calendar) -> str:
-        pass
-
-    @abstractmethod
-    def render_days(self, days: List[CalendarDay], calendar: Calendar) -> str:
-        pass
-
     def render(self, calendar: Calendar) -> str:
-        days = calendar.generate_days()
-
-        result = self.render_header(calendar)
-        result += self.render_weekdays(calendar)
-        result += self.render_days(days, calendar)
-
-        return result
+        pass
 
 
 class HTMLCalendarRenderer(CalendarRenderer):
@@ -292,93 +303,94 @@ class HTMLCalendarRenderer(CalendarRenderer):
     font-size: {self.theme.title_size}px;
     color: {self.theme.title_color};
     background-color: {self.theme.title_bg};
+    text-align: center;
+    padding: 8px;
+}}
+.calendar-weekday-{self._style_id} {{
+    font-family: {self.theme.title_font};
+    font-size: {self.theme.title_size}px;
+    color: {self.theme.title_color};
+    background-color: {self.theme.title_bg};
+    text-align: center;
+    padding: 5px;
 }}
 .calendar-day-{self._style_id} {{
     font-family: {self.theme.day_font};
     font-size: {self.theme.day_size}px;
     color: {self.theme.day_color};
     background-color: {self.theme.day_bg};
+    text-align: center;
+    padding: 8px;
+    width: 40px;
+    height: 30px;
 }}
 .calendar-weekend-{self._style_id} {{
     font-family: {self.theme.day_font};
     font-size: {self.theme.day_size}px;
     color: {self.theme.weekend_color};
     background-color: {self.theme.weekend_bg};
+    text-align: center;
+    padding: 8px;
+    width: 40px;
+    height: 30px;
 }}
 .calendar-holiday-{self._style_id} {{
     font-family: {self.theme.day_font};
     font-size: {self.theme.day_size}px;
     color: {self.theme.holiday_color};
     background-color: {self.theme.holiday_bg};
+    text-align: center;
+    padding: 8px;
+    width: 40px;
+    height: 30px;
+}}
+.calendar-current-{self._style_id} {{
+    border: 3px solid {self.theme.current_day_border} !important;
+    padding: 5px !important;
 }}
 </style>"""
 
-    def render_header(self, calendar: Calendar) -> str:
-        month_name = calendar.localization.get_months()[calendar.month - 1]
-        title = f"{month_name} {calendar.year}"
-
+    def render(self, calendar: Calendar) -> str:
         styles = self._generate_styles()
-
-        return f"""{styles}
-<table border="1" cellspacing="0" cellpadding="0">
-<tr><td bgcolor="{self.theme.border_color}">
-<table border="0" cellspacing="1" cellpadding="3">
-<tr><td colspan="7" class="calendar-title-{self._style_id}" align="center">
-<b>{title}</b>
-</td></tr>"""
-
-    def render_weekdays(self, calendar: Calendar) -> str:
+        calendar_grid = calendar.generate_calendar_grid()
         weekdays = calendar.localization.get_weekdays()
-        html = "<tr>"
 
-        for weekday in weekdays:
-            html += f'<td class="calendar-title-{self._style_id}" align="center">{weekday}</td>'
+        html = styles
+        html += f'<table border="1" cellspacing="0" cellpadding="0" style="border-color: {self.theme.border_color};">'
+        html += f'<tr><td style="background-color: {self.theme.border_color};">'
+        html += '<table border="0" cellspacing="1" cellpadding="0">'
 
-        html += "</tr>"
-        return html
-
-    def render_days(self, days: List[CalendarDay], calendar: Calendar) -> str:
-        html = ""
-        first_weekday = calendar.get_first_weekday()
+        html += f'<tr><td colspan="7" class="calendar-title-{self._style_id}"><b>{calendar.get_title()}</b></td></tr>'
 
         html += "<tr>"
-        for i in range(first_weekday):
-            html += (
-                f'<td class="calendar-day-{self._style_id}" align="center">&nbsp;</td>'
-            )
+        for weekday in weekdays:
+            html += f'<td class="calendar-weekday-{self._style_id}">{weekday}</td>'
+        html += "</tr>"
 
-        current_weekday = first_weekday
+        for week in calendar_grid:
+            html += "<tr>"
+            for day in week:
+                css_class = self._get_day_css_class(day)
+                title_attr = (
+                    f' title="{day.holiday_title}"' if day.holiday_title else ""
+                )
+                current_class = (
+                    f" calendar-current-{self._style_id}" if day.is_current else ""
+                )
 
-        for day in days:
-            if current_weekday == 7:
-                html += "</tr><tr>"
-                current_weekday = 0
+                html += f'<td class="{css_class}{current_class}"{title_attr}>{day.get_display_text()}</td>'
+            html += "</tr>"
 
-            css_class = f"calendar-day-{self._style_id}"
-            style = ""
-            title_attr = ""
-
-            if day.is_holiday:
-                css_class = f"calendar-holiday-{self._style_id}"
-                if day.holiday_title:
-                    title_attr = f' title="{day.holiday_title}"'
-            elif day.is_weekend:
-                css_class = f"calendar-weekend-{self._style_id}"
-
-            if day.is_current:
-                style = f' style="border: 3px solid {self.theme.current_day_border};"'
-
-            html += f'<td class="{css_class}" align="center"{title_attr}{style}>{day.day}</td>'
-            current_weekday += 1
-
-        while current_weekday < 7:
-            html += (
-                f'<td class="calendar-day-{self._style_id}" align="center">&nbsp;</td>'
-            )
-            current_weekday += 1
-
-        html += "</tr></table></td></tr></table>"
+        html += "</table></td></tr></table>"
         return html
+
+    def _get_day_css_class(self, day: CalendarDay) -> str:
+        if day.is_holiday:
+            return f"calendar-holiday-{self._style_id}"
+        elif day.is_weekend:
+            return f"calendar-weekend-{self._style_id}"
+        else:
+            return f"calendar-day-{self._style_id}"
 
 
 class HTMLDocumentBuilder:
@@ -390,8 +402,6 @@ class HTMLDocumentBuilder:
         self._body = ""
         self._charset = "utf-8"
         self._meta_tags = []
-        self._stylesheets = []
-        self._scripts = []
         return self
 
     def set_title(self, title: str):
@@ -410,37 +420,16 @@ class HTMLDocumentBuilder:
         self._meta_tags.append(f'<meta name="{name}" content="{content}">')
         return self
 
-    def add_stylesheet(self, href: str):
-        self._stylesheets.append(
-            f'<link rel="stylesheet" type="text/css" href="{href}">'
-        )
-        return self
-
-    def add_script(self, src: str):
-        self._scripts.append(f'<script src="{src}"></script>')
-        return self
-
     def build(self) -> str:
-        meta_section = "\n    ".join(
-            [f'<meta charset="{self._charset}">'] + self._meta_tags
-        )
-        stylesheets_section = "\n    ".join(self._stylesheets)
-        scripts_section = "\n    ".join(self._scripts)
-
-        head_content = [
-            meta_section,
-            f"<title>{self._title}</title>",
-            stylesheets_section,
-            scripts_section,
-        ]
-
-        head_content = [section for section in head_content if section.strip()]
-        head_html = "\n    ".join(head_content)
+        meta_section = f'<meta charset="{self._charset}">'
+        if self._meta_tags:
+            meta_section += "\n    " + "\n    ".join(self._meta_tags)
 
         return f"""<!DOCTYPE html>
 <html>
 <head>
-    {head_html}
+    {meta_section}
+    <title>{self._title}</title>
 </head>
 <body>
     {self._body}
@@ -448,10 +437,16 @@ class HTMLDocumentBuilder:
 </html>"""
 
 
+class CalendarFileManager:
+    @staticmethod
+    def save_to_file(content: str, filename: str, encoding: str = "utf-8"):
+        with open(filename, "w", encoding=encoding) as f:
+            f.write(content)
+
+
 class CalendarGenerator:
     def __init__(self, theme: Optional[CalendarTheme] = None):
         self.theme = theme or CalendarTheme()
-        self.builder = HTMLDocumentBuilder()
 
     def generate_html_calendar(
         self, year: int, month: int, lang: str = "ru", filename: Optional[str] = None
@@ -462,51 +457,41 @@ class CalendarGenerator:
 
         calendar_html = renderer.render(calendar)
 
-        month_name = localization.get_months()[month - 1]
         document = (
-            self.builder.reset()
-            .set_title(f"Календарь - {month_name} {year}")
+            HTMLDocumentBuilder()
+            .set_title(f"Календарь - {calendar.get_title()}")
             .add_meta_tag("viewport", "width=device-width, initial-scale=1.0")
-            .add_meta_tag("description", f"Календарь на {month_name} {year}")
+            .add_meta_tag("description", f"Календарь на {calendar.get_title()}")
             .set_body(calendar_html)
             .build()
         )
 
         if filename:
-            # Добавляем .html если расширение не указано
-            if not filename.lower().endswith(".html"):
-                filename += ".html"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(document)
+            CalendarFileManager.save_to_file(document, filename)
 
         return document
 
+    def generate_current_month(
+        self, lang: str = "ru", filename: Optional[str] = None
+    ) -> str:
+        current_time = time.localtime()
+        return self.generate_html_calendar(
+            current_time.tm_year, current_time.tm_mon, lang, filename
+        )
+
     def generate_multiple_calendars(
-        self,
-        year: int,
-        month: int,
-        languages: Optional[List[str]] = None,
-        filename_template: str = "calendar_{lang}.html",
+        self, year: int, month: int, languages: Optional[List[str]] = None
     ) -> Dict[str, str]:
         if languages is None:
             languages = LocalizationFactory.get_supported_languages()
 
         results = {}
         for lang in languages:
-            filename = filename_template.format(lang=lang)
+            filename = f"calendar_{lang}_{year}_{month:02d}.html"
             document = self.generate_html_calendar(year, month, lang, filename)
-            results[lang] = document
+            results[lang] = filename
 
         return results
-
-    def set_custom_theme(self, theme: CalendarTheme):
-        self.theme = theme
-
-    def get_supported_languages(self) -> List[str]:
-        return LocalizationFactory.get_supported_languages()
-
-    def add_custom_language(self, lang: str, localization_class):
-        LocalizationFactory.register_language(lang, localization_class)
 
 
 if __name__ == "__main__":
@@ -516,16 +501,17 @@ if __name__ == "__main__":
     current_year = current_time.tm_year
     current_month = current_time.tm_mon
 
-    results = generator.generate_multiple_calendars(
+    generated_files = generator.generate_multiple_calendars(
         year=current_year, month=current_month
     )
 
-    print(f"Созданы календари для {len(results)} языков:")
-    for lang in results.keys():
-        print(f"- calendar_{lang}.html")
+    for lang, filename in generated_files.items():
+        localization = LocalizationFactory.create(lang)
+        month_name = localization.get_months()[current_month - 1]
+        print(f"- {filename} ({month_name} {current_year} на {lang})")
 
-    print(f"\nПоддерживаемые языки: {generator.get_supported_languages()}")
+    print(f"\nПоддерживаемые языки: {LocalizationFactory.get_supported_languages()}")
 
-    custom_calendar = generator.generate_html_calendar(
-        year=2025, month=1, lang="ru", filename="new_year_2025.html"
+    special_calendar = generator.generate_html_calendar(
+        year=2025, month=1, lang="ru", filename="december_2025.html"
     )

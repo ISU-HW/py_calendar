@@ -381,8 +381,76 @@ class HTMLCalendarRenderer(CalendarRenderer):
         return html
 
 
+class HTMLDocumentBuilder:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self._title = ""
+        self._body = ""
+        self._charset = "utf-8"
+        self._meta_tags = []
+        self._stylesheets = []
+        self._scripts = []
+        return self
+
+    def set_title(self, title: str):
+        self._title = title
+        return self
+
+    def set_body(self, body: str):
+        self._body = body
+        return self
+
+    def set_charset(self, charset: str):
+        self._charset = charset
+        return self
+
+    def add_meta_tag(self, name: str, content: str):
+        self._meta_tags.append(f'<meta name="{name}" content="{content}">')
+        return self
+
+    def add_stylesheet(self, href: str):
+        self._stylesheets.append(
+            f'<link rel="stylesheet" type="text/css" href="{href}">'
+        )
+        return self
+
+    def add_script(self, src: str):
+        self._scripts.append(f'<script src="{src}"></script>')
+        return self
+
+    def build(self) -> str:
+        meta_section = "\n    ".join(
+            [f'<meta charset="{self._charset}">'] + self._meta_tags
+        )
+        stylesheets_section = "\n    ".join(self._stylesheets)
+        scripts_section = "\n    ".join(self._scripts)
+
+        head_content = [
+            meta_section,
+            f"<title>{self._title}</title>",
+            stylesheets_section,
+            scripts_section,
+        ]
+
+        head_content = [section for section in head_content if section.strip()]
+        head_html = "\n    ".join(head_content)
+
+        return f"""<!DOCTYPE html>
+<html>
+<head>
+    {head_html}
+</head>
+<body>
+    {self._body}
+</body>
+</html>"""
+
+
 if __name__ == "__main__":
     theme = CalendarTheme()
+    builder = HTMLDocumentBuilder()
 
     for lang in LocalizationFactory.get_supported_languages():
         localization = LocalizationFactory.create(lang)
@@ -390,10 +458,19 @@ if __name__ == "__main__":
         renderer = HTMLCalendarRenderer(theme)
 
         calendar_html = renderer.render(calendar)
-        html = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>{calendar_html}</body></html>"
+        month_name = localization.get_months()[calendar.month - 1]
+
+        document = (
+            builder.reset()
+            .set_title(f"Календарь - {month_name} {calendar.year}")
+            .add_meta_tag("viewport", "width=device-width, initial-scale=1.0")
+            .add_meta_tag("description", f"Календарь на {month_name} {calendar.year}")
+            .set_body(calendar_html)
+            .build()
+        )
 
         with open(f"calendar_{lang}.html", "w", encoding="utf-8") as file:
-            file.write(html)
+            file.write(document)
 
     print(
         f"Календари созданы для языков: {LocalizationFactory.get_supported_languages()}"

@@ -79,9 +79,73 @@ class EnglishLocalization:
         }
 
 
+class GermanLocalization:
+    def get_weekdays(self) -> Tuple[str, ...]:
+        return ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
+    def get_months(self) -> Tuple[str, ...]:
+        return (
+            "Januar",
+            "Februar",
+            "März",
+            "April",
+            "Mai",
+            "Juni",
+            "Juli",
+            "August",
+            "September",
+            "Oktober",
+            "November",
+            "Dezember",
+        )
+
+    def get_week_start(self) -> int:
+        return 1
+
+    def get_holidays(self) -> Dict[Tuple[int, int], str]:
+        return {
+            (1, 1): "Neujahr",
+            (6, 1): "Heilige Drei Könige",
+            (25, 12): "Weihnachten",
+            (26, 12): "Zweiter Weihnachtstag",
+        }
+
+
+class LocalizationFactory:
+    _strategies = {
+        "ru": RussianLocalization,
+        "en": EnglishLocalization,
+        "ge": GermanLocalization,
+    }
+
+    @classmethod
+    def create(cls, lang: str) -> LocalizationStrategy:
+        if lang not in cls._strategies:
+            raise ValueError(f"Unsupported language: {lang}")
+        return cls._strategies[lang]()
+
+    @classmethod
+    def register_language(cls, lang: str, strategy_class):
+        cls._strategies[lang] = strategy_class
+
+    @classmethod
+    def get_supported_languages(cls):
+        return list(cls._strategies.keys())
+
+
 class MonthlyCalendar:
-    def __init__(self, year=None, month=None, localization_strategy=None):
-        self.localization = localization_strategy or RussianLocalization()
+    def __init__(self, year=None, month=None, lang="ru"):
+        self.localization = LocalizationFactory.create(lang)
+
+        # Обновляем цветовую схему согласно требованиям
+        self.saFontColor = "#FF0000"  # Ярко красный для субботы
+        self.saBGColor = "#FFE0E0"  # Светло красный фон для субботы
+        self.suFontColor = "#FF0000"  # Ярко красный для воскресенья
+        self.suBGColor = "#FFE0E0"  # Светло красный фон для воскресенья
+
+        # Синий цвет для праздников согласно требованиям
+        self.holidayFontColor = "#0000FF"  # Синий цвет текста
+        self.holidayBGColor = "#E0E0FF"  # Светло синий фон
 
         self.tFontFace = "Arial, Helvetica"
         self.tFontSize = 12
@@ -389,10 +453,14 @@ class MonthlyCalendar:
 
 
 if __name__ == "__main__":
-    ru_localization = RussianLocalization()
-    calendar = MonthlyCalendar(2025, 9, ru_localization)
-    body = calendar.create()
-    html = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>{body}</body></html>"
+    for lang in LocalizationFactory.get_supported_languages():
+        calendar = MonthlyCalendar(2025, 9, lang)
+        body = calendar.create()
+        html = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body>{body}</body></html>"
 
-    with open("calendar_ru.html", "w", encoding="utf-8") as file:
-        file.write(html)
+        with open(f"calendar_{lang}.html", "w", encoding="utf-8") as file:
+            file.write(html)
+
+    print(
+        f"Календари созданы для языков: {LocalizationFactory.get_supported_languages()}"
+    )
